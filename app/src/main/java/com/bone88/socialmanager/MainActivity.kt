@@ -48,8 +48,8 @@ class MainActivity : Activity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); window.statusBarColor = bg; window.navigationBarColor = bg; showHome() }
     private fun base(section: String) {
-        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(22)); setBackgroundColor(bg) }
-        setContentView(ScrollView(this).apply { clipToPadding = false; addView(root) })
+        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(22)); setBackgroundColor(bg); layoutParams = ScrollView.LayoutParams(-1, -2) }
+        setContentView(ScrollView(this).apply { fillViewport = true; clipToPadding = false; setBackgroundColor(bg); addView(root) })
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(20)) }
         top.addView(TextView(this).apply { text = "B88"; textSize = 19f; gravity = Gravity.CENTER; setTextColor(bg); setTypeface(typeface, Typeface.BOLD); background = rounded(cyan, 12); setPadding(dp(11), dp(8), dp(11), dp(8)) })
         val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, 0, 0) }
