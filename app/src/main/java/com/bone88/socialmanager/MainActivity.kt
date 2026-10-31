@@ -90,7 +90,7 @@ class MainActivity : Activity() {
         settings.addView(label("Conecta Telegram y revisa la información de privacidad.", 13f, muted))
         settings.addView(actionButton("AJUSTES Y CONEXIONES") { showSettings() })
         settings.addView(actionButton("PRIVACIDAD Y DATOS") { showPrivacy() }); root.addView(settings)
-        root.addView(label("BONE88 SOCIAL MANAGER  •  VERSIÓN 1.1", 10f, muted).apply { gravity = Gravity.CENTER })
+        root.addView(label("BONE88 SOCIAL MANAGER  •  VERSIÓN 1.2", 10f, muted).apply { gravity = Gravity.CENTER })
     }
     private fun showCreate() {
         base("NUEVA PUBLICACIÓN")
@@ -133,6 +133,7 @@ class MainActivity : Activity() {
                 val conn = URL(endpoint.trimEnd('/') + "/telegram/send").openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"; conn.connectTimeout = 15000; conn.readTimeout = 15000; conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("X-API-Key", prefs.getString("api_key", "") ?: "")
                 conn.outputStream.use { it.write(JSONObject().put("text", message).toString().toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
                 val response = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
@@ -150,7 +151,9 @@ class MainActivity : Activity() {
         panel.addView(label("TELEGRAM + CLOUDFLARE", 15f, Color.WHITE, true))
         panel.addView(label("Introduce la dirección base de tu Worker. La aplicación añadirá /telegram/send.", 13f, muted))
         val url = field("https://tu-worker.tu-cuenta.workers.dev"); url.setText(prefs.getString("worker", "")); panel.addView(url)
-        panel.addView(actionButton("GUARDAR DIRECCIÓN", true) { prefs.edit().putString("worker", url.text.toString().trim()).apply(); toast("Dirección guardada"); showHome() })
+        panel.addView(label("CLAVE DE SEGURIDAD", 11f, muted, true))
+        val apiKey = field("Pega aquí tu BONE88_API_KEY"); apiKey.setText(prefs.getString("api_key", "")); apiKey.inputType = 129; panel.addView(apiKey)
+        panel.addView(actionButton("GUARDAR DIRECCIÓN", true) { prefs.edit().putString("worker", url.text.toString().trim()).putString("api_key", apiKey.text.toString().trim()).apply(); toast("Dirección y clave guardadas"); showHome() })
         root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
     }
     private fun showPrivacy() {
