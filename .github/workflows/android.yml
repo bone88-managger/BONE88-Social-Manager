@@ -1,4 +1,8 @@
 name: Build BONE88 Android App
+
+concurrency:
+  group: bone88-android-build
+  cancel-in-progress: true
 on:
   workflow_dispatch:
   push:
