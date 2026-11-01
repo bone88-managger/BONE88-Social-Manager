@@ -1,6 +1,7 @@
 package com.bone88.socialmanager
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.util.Base64
@@ -31,6 +32,8 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(153, 169, 195)
     private val prefs by lazy { getSharedPreferences("bone88", MODE_PRIVATE) }
     private lateinit var root: LinearLayout
+    private var currentScreen: String = ""
+    private var lastBackPressTime: Long = 0L
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int = 18, stroke: Int = Color.TRANSPARENT) =
         GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat(); if (stroke != Color.TRANSPARENT) setStroke(dp(1), stroke) }
@@ -55,6 +58,20 @@ class MainActivity : Activity() {
         setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(surface2, 12, 0xff354766.toInt())
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); window.statusBarColor = bg; window.navigationBarColor = bg; showHome() }
+    @Deprecated("Deprecated in Android API; retained for compatibility")
+    override fun onBackPressed() {
+        if (currentScreen != "PANEL DE CONTROL") {
+            showHome()
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastBackPressTime < 2000L) {
+            super.onBackPressed()
+        } else {
+            lastBackPressTime = now
+            toast("Pulsa Atrás otra vez para salir")
+        }
+    }
     @Deprecated("Deprecated in Android API; retained for compatibility with Android 10")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -68,6 +85,7 @@ class MainActivity : Activity() {
         }
     }
     private fun base(section: String) {
+        currentScreen = section
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(22)); setBackgroundColor(bg); layoutParams = FrameLayout.LayoutParams(-1, -2) }
         setContentView(ScrollView(this).apply { setFillViewport(true); clipToPadding = false; setBackgroundColor(bg); addView(root) })
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(20)) }
@@ -188,6 +206,20 @@ class MainActivity : Activity() {
                     else { obj.put("status", "Aprobado (pendiente de API oficial)"); save(a); toast("Aprobado. Falta conectar la API oficial."); showQueue() }
                 })
                 panel.addView(actionButton("ELIMINAR BORRADOR") { a.remove(index); save(a); showQueue() })
+            } else {
+                panel.addView(actionButton("ELIMINAR DEL HISTORIAL") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Eliminar publicación")
+                        .setMessage("Esta publicación se eliminará solamente del historial de la aplicación. No se borrará de Telegram. ¿Continuar?")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Eliminar") { _, _ ->
+                            a.remove(index)
+                            save(a)
+                            toast("Publicación eliminada del historial")
+                            showQueue()
+                        }
+                        .show()
+                })
             }
             root.addView(panel)
         }
