@@ -43,11 +43,12 @@ export default {
       return json({ ok: false, error: "Invalid JSON body" }, 400);
     }
     const message = typeof payload?.text === "string" ? payload.text.trim() : "";
-    if (!message) return json({ ok: false, error: "Message text is required" }, 400);
+    const hasPhoto = typeof payload?.photo_base64 === "string" && payload.photo_base64.length > 0;
+    if (!message && !hasPhoto) return json({ ok: false, error: "A message or photo is required" }, 400);
     if (message.length > 4096) return json({ ok: false, error: "Telegram messages cannot exceed 4096 characters" }, 400);
     try {
       let telegramResponse;
-      if (typeof payload.photo_base64 === "string" && payload.photo_base64.length > 0) {
+      if (hasPhoto) {
         if (payload.photo_base64.length > 12582912) return json({ ok: false, error: "Image is too large" }, 413);
         const binary = atob(payload.photo_base64);
         const bytes = new Uint8Array(binary.length);
@@ -55,7 +56,7 @@ export default {
         const mime = typeof payload.photo_mime_type === "string" && payload.photo_mime_type.startsWith("image/") ? payload.photo_mime_type : "image/jpeg";
         const form = new FormData();
         form.append("chat_id", env.TELEGRAM_CHAT_ID);
-        if (message.length <= 1024) form.append("caption", message);
+        if (message.length > 0 && message.length <= 1024) form.append("caption", message);
         form.append("photo", new Blob([bytes], { type: mime }), "bone88-image");
         telegramResponse = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendPhoto", { method: "POST", body: form });
         const photoResult = await telegramResponse.json();
