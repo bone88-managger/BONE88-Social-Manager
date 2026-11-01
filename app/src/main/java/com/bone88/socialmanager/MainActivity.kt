@@ -96,16 +96,29 @@ class MainActivity : Activity() {
         base("NUEVA PUBLICACIÓN")
         val panel = card(); panel.addView(label("PREPARA TU CONTENIDO", 16f, Color.WHITE, true))
         panel.addView(label("Escribe el mensaje y selecciona el canal de destino.", 13f, muted))
+        panel.addView(label("TÍTULO", 11f, muted, true))
+        val title = field("Título de la publicación"); panel.addView(title)
+        panel.addView(label("TEXTO", 11f, muted, true))
         val body = field("Escribe aquí tu publicación").apply { minLines = 5; gravity = Gravity.TOP }; panel.addView(body)
+        panel.addView(label("HASHTAGS", 11f, muted, true))
+        val hashtags = field("#gaming #BONE88"); panel.addView(hashtags)
         panel.addView(label("CANAL", 11f, muted, true))
         val channel = Spinner(this); channel.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Telegram", "TikTok", "Instagram", "YouTube")); panel.addView(channel)
         panel.addView(actionButton("GUARDAR BORRADOR", true) {
             val value = body.text.toString().trim()
-            if (value.isEmpty()) { toast("Escribe algo primero"); return@actionButton }
-            val a = items(); a.put(JSONObject().put("text", value).put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
+            val titleValue = title.text.toString().trim()
+            val tagsValue = hashtags.text.toString().trim()
+            if (value.isEmpty() && titleValue.isEmpty()) { toast("Escribe un título o un texto"); return@actionButton }
+            val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
             save(a); toast("Borrador guardado"); showQueue()
         })
         root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
+    }
+    private fun publicationMessage(obj: JSONObject): String {
+        val title = obj.optString("title").trim()
+        val body = obj.optString("text").trim()
+        val tags = obj.optString("hashtags").trim()
+        return listOf(title, body, tags).filter { it.isNotEmpty() }.joinToString("\n\n")
     }
     private fun showQueue() {
         base("TUS PUBLICACIONES"); val a = items()
@@ -113,10 +126,15 @@ class MainActivity : Activity() {
         for (i in a.length() - 1 downTo 0) {
             val obj = a.getJSONObject(i); val index = i; val panel = card()
             panel.addView(label(obj.optString("channel").uppercase(), 11f, cyan, true))
-            panel.addView(label(obj.optString("status"), 12f, violet, true)); panel.addView(label(obj.optString("text"), 14f, Color.WHITE))
+            panel.addView(label(obj.optString("status"), 12f, violet, true))
+            val titleText = obj.optString("title").ifBlank { "" }
+            if (titleText.isNotBlank()) panel.addView(label(titleText, 16f, Color.WHITE, true))
+            panel.addView(label(obj.optString("text"), 14f, Color.WHITE))
+            val tagsText = obj.optString("hashtags").ifBlank { "" }
+            if (tagsText.isNotBlank()) panel.addView(label(tagsText, 13f, cyan))
             if (obj.optString("status") != "Publicado") {
                 panel.addView(actionButton("APROBAR Y ENVIAR", true) {
-                    if (obj.optString("channel") == "Telegram") sendTelegram(obj.optString("text"), index)
+                    if (obj.optString("channel") == "Telegram") sendTelegram(publicationMessage(obj), index)
                     else { obj.put("status", "Aprobado (pendiente de API oficial)"); save(a); toast("Aprobado. Falta conectar la API oficial."); showQueue() }
                 })
                 panel.addView(actionButton("ELIMINAR BORRADOR") { a.remove(index); save(a); showQueue() })
