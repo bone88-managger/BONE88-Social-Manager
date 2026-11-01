@@ -112,6 +112,7 @@ class MainActivity : Activity() {
         root.addView(label("BONE88 SOCIAL MANAGER  •  VERSIÓN 1.4", 10f, muted).apply { gravity = Gravity.CENTER })
     }
     private fun showCreate() {
+        selectedImageUri = null
         base("NUEVA PUBLICACIÓN")
         val panel = card(); panel.addView(label("PREPARA TU CONTENIDO", 16f, Color.WHITE, true))
         panel.addView(label("Escribe el mensaje y selecciona el canal de destino.", 13f, muted))
@@ -154,7 +155,7 @@ class MainActivity : Activity() {
             val tagsValue = hashtags.text.toString().trim()
             if (value.isEmpty() && titleValue.isEmpty()) { toast("Escribe un título o un texto"); return@actionButton }
             val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("imageUri", selectedImageUri?.toString() ?: "").put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
-            save(a); toast("Borrador guardado"); showQueue()
+            save(a); selectedImageUri = null; toast("Borrador guardado"); showQueue()
         })
         root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { selectedImageUri = null; showHome() })
     }
