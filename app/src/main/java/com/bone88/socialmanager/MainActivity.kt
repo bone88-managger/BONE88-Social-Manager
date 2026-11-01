@@ -153,7 +153,7 @@ class MainActivity : Activity() {
             val value = body.text.toString().trim()
             val titleValue = title.text.toString().trim()
             val tagsValue = hashtags.text.toString().trim()
-            if (value.isEmpty() && titleValue.isEmpty()) { toast("Escribe un título o un texto"); return@actionButton }
+            if (value.isEmpty() && titleValue.isEmpty() && selectedImageUri == null) { toast("Añade una imagen, un título o un texto"); return@actionButton }
             val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("imageUri", selectedImageUri?.toString() ?: "").put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
             save(a); selectedImageUri = null; toast("Borrador guardado"); showQueue()
         })
