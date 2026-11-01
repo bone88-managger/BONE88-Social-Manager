@@ -1,6 +1,9 @@
 package com.bone88.socialmanager
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.util.Base64
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
@@ -16,6 +19,10 @@ import java.net.URL
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
+    private var selectedImageUri: Uri? = null
+    private var imagePreview: ImageView? = null
+    private var imageStatus: TextView? = null
+    private val PICK_IMAGE = 8801
     private val bg = Color.rgb(9, 14, 27)
     private val surface = Color.rgb(18, 27, 47)
     private val surface2 = Color.rgb(25, 37, 62)
@@ -48,6 +55,18 @@ class MainActivity : Activity() {
         setPadding(dp(14), dp(12), dp(14), dp(12)); background = rounded(surface2, 12, 0xff354766.toInt())
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); window.statusBarColor = bg; window.navigationBarColor = bg; showHome() }
+    @Deprecated("Deprecated in Android API; retained for compatibility with Android 10")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PICK_IMAGE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            selectedImageUri = uri
+            imagePreview?.setImageURI(uri)
+            imagePreview?.visibility = View.VISIBLE
+            imageStatus?.text = "Imagen seleccionada"
+        }
+    }
     private fun base(section: String) {
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(22)); setBackgroundColor(bg); layoutParams = FrameLayout.LayoutParams(-1, -2) }
         setContentView(ScrollView(this).apply { setFillViewport(true); clipToPadding = false; setBackgroundColor(bg); addView(root) })
@@ -90,12 +109,23 @@ class MainActivity : Activity() {
         settings.addView(label("Conecta Telegram y revisa la información de privacidad.", 13f, muted))
         settings.addView(actionButton("AJUSTES Y CONEXIONES") { showSettings() })
         settings.addView(actionButton("PRIVACIDAD Y DATOS") { showPrivacy() }); root.addView(settings)
-        root.addView(label("BONE88 SOCIAL MANAGER  •  VERSIÓN 1.2", 10f, muted).apply { gravity = Gravity.CENTER })
+        root.addView(label("BONE88 SOCIAL MANAGER  •  VERSIÓN 1.4", 10f, muted).apply { gravity = Gravity.CENTER })
     }
     private fun showCreate() {
         base("NUEVA PUBLICACIÓN")
         val panel = card(); panel.addView(label("PREPARA TU CONTENIDO", 16f, Color.WHITE, true))
         panel.addView(label("Escribe el mensaje y selecciona el canal de destino.", 13f, muted))
+        val mediaBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(10), dp(10), dp(10), dp(10)); background = rounded(surface2, 14, 0xff354766.toInt()) }
+        imagePreview = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.CENTER_CROP; visibility = View.GONE; layoutParams = LinearLayout.LayoutParams(-1, dp(180)) }
+        mediaBox.addView(imagePreview)
+        imageStatus = label(if (selectedImageUri == null) "Ninguna imagen seleccionada" else "Imagen seleccionada", 12f, muted)
+        mediaBox.addView(imageStatus)
+        mediaBox.addView(actionButton("＋  AÑADIR IMAGEN DESDE EL TELÉFONO") {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "image/*"; addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }
+            startActivityForResult(intent, PICK_IMAGE)
+        })
+        if (selectedImageUri != null) { imagePreview?.setImageURI(selectedImageUri); imagePreview?.visibility = View.VISIBLE }
+        panel.addView(mediaBox)
         panel.addView(label("TÍTULO", 11f, muted, true))
         val title = field("Título de la publicación"); panel.addView(title)
         panel.addView(label("TEXTO", 11f, muted, true))
@@ -103,16 +133,30 @@ class MainActivity : Activity() {
         panel.addView(label("HASHTAGS", 11f, muted, true))
         val hashtags = field("#gaming #BONE88"); panel.addView(hashtags)
         panel.addView(label("CANAL", 11f, muted, true))
-        val channel = Spinner(this); channel.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Telegram", "TikTok", "Instagram", "YouTube")); panel.addView(channel)
+        val channel = Spinner(this)
+        channel.background = rounded(surface2, 12, 0xff354766.toInt())
+        val channelAdapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, listOf("Telegram", "TikTok", "Instagram", "YouTube")) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = TextView(this@MainActivity).apply { text = getItem(position); textSize = 15f; setTextColor(Color.WHITE); setPadding(dp(14), dp(12), dp(14), dp(12)); setBackgroundColor(surface2) }
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = TextView(this@MainActivity).apply { text = getItem(position); textSize = 15f; setTextColor(Color.WHITE); setPadding(dp(16), dp(14), dp(16), dp(14)); setBackgroundColor(surface) }
+                return v
+            }
+        }
+        channelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        channel.adapter = channelAdapter
+        panel.addView(channel)
         panel.addView(actionButton("GUARDAR BORRADOR", true) {
             val value = body.text.toString().trim()
             val titleValue = title.text.toString().trim()
             val tagsValue = hashtags.text.toString().trim()
             if (value.isEmpty() && titleValue.isEmpty()) { toast("Escribe un título o un texto"); return@actionButton }
-            val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
+            val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("imageUri", selectedImageUri?.toString() ?: "").put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
             save(a); toast("Borrador guardado"); showQueue()
         })
-        root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
+        root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { selectedImageUri = null; showHome() })
     }
     private fun publicationMessage(obj: JSONObject): String {
         val title = obj.optString("title").trim()
@@ -132,9 +176,14 @@ class MainActivity : Activity() {
             panel.addView(label(obj.optString("text"), 14f, Color.WHITE))
             val tagsText = obj.optString("hashtags").ifBlank { "" }
             if (tagsText.isNotBlank()) panel.addView(label(tagsText, 13f, cyan))
+            val savedImage = obj.optString("imageUri")
+            if (savedImage.isNotBlank()) {
+                val preview = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(Uri.parse(savedImage)); layoutParams = LinearLayout.LayoutParams(-1, dp(180)) }
+                panel.addView(preview)
+            }
             if (obj.optString("status") != "Publicado") {
                 panel.addView(actionButton("APROBAR Y ENVIAR", true) {
-                    if (obj.optString("channel") == "Telegram") sendTelegram(publicationMessage(obj), index)
+                    if (obj.optString("channel") == "Telegram") sendTelegram(publicationMessage(obj), index, savedImage)
                     else { obj.put("status", "Aprobado (pendiente de API oficial)"); save(a); toast("Aprobado. Falta conectar la API oficial."); showQueue() }
                 })
                 panel.addView(actionButton("ELIMINAR BORRADOR") { a.remove(index); save(a); showQueue() })
@@ -143,7 +192,7 @@ class MainActivity : Activity() {
         }
         root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
     }
-    private fun sendTelegram(message: String, index: Int) {
+    private fun sendTelegram(message: String, index: Int, imageUri: String = "") {
         val endpoint = prefs.getString("worker", "")!!.trim()
         if (endpoint.isEmpty()) { toast("Configura primero la URL del Worker"); showSettings(); return }
         thread {
@@ -152,7 +201,14 @@ class MainActivity : Activity() {
                 conn.requestMethod = "POST"; conn.connectTimeout = 15000; conn.readTimeout = 15000; conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("X-API-Key", prefs.getString("api_key", "") ?: "")
-                conn.outputStream.use { it.write(JSONObject().put("text", message).toString().toByteArray(Charsets.UTF_8)) }
+                val payload = JSONObject().put("text", message)
+                if (imageUri.isNotBlank()) {
+                    val bytes = contentResolver.openInputStream(Uri.parse(imageUri))?.use { it.readBytes() } ?: throw Exception("No se pudo leer la imagen")
+                    if (bytes.size > 9 * 1024 * 1024) throw Exception("La imagen debe pesar menos de 9 MB")
+                    val mime = contentResolver.getType(Uri.parse(imageUri)) ?: "image/jpeg"
+                    payload.put("photo_base64", Base64.encodeToString(bytes, Base64.NO_WRAP)).put("photo_mime_type", mime)
+                }
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
                 val response = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
                 runOnUiThread {
