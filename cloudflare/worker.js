@@ -46,15 +46,36 @@ export default {
     if (!message) return json({ ok: false, error: "Message text is required" }, 400);
     if (message.length > 4096) return json({ ok: false, error: "Telegram messages cannot exceed 4096 characters" }, 400);
     try {
-      const telegramResponse = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendMessage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      let telegramResponse;
+      if (typeof payload.photo_base64 === "string" && payload.photo_base64.length > 0) {
+        if (payload.photo_base64.length > 12582912) return json({ ok: false, error: "Image is too large" }, 413);
+        const binary = atob(payload.photo_base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const mime = typeof payload.photo_mime_type === "string" && payload.photo_mime_type.startsWith("image/") ? payload.photo_mime_type : "image/jpeg";
+        const form = new FormData();
+        form.append("chat_id", env.TELEGRAM_CHAT_ID);
+        if (message.length <= 1024) form.append("caption", message);
+        form.append("photo", new Blob([bytes], { type: mime }), "bone88-image");
+        telegramResponse = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendPhoto", { method: "POST", body: form });
+        const photoResult = await telegramResponse.json();
+        if (!telegramResponse.ok || !photoResult.ok) return json({ ok: false, error: photoResult.description || "Telegram rejected the photo" }, 502);
+        if (message.length > 1024) {
+          const textResponse = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendMessage", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message, disable_web_page_preview: true })
+          });
+          const textResult = await textResponse.json();
+          if (!textResponse.ok || !textResult.ok) return json({ ok: false, error: textResult.description || "Photo sent but message text failed" }, 502);
+        }
+        return json({ ok: true, message_id: photoResult.result?.message_id ?? null, chat_id: photoResult.result?.chat?.id ?? null, photo: true });
+      }
+      telegramResponse = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/sendMessage", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message, disable_web_page_preview: true })
       });
       const result = await telegramResponse.json();
-      if (!telegramResponse.ok || !result.ok) {
-        return json({ ok: false, error: result.description || "Telegram rejected the message" }, 502);
-      }
+      if (!telegramResponse.ok || !result.ok) return json({ ok: false, error: result.description || "Telegram rejected the message" }, 502);
       return json({ ok: true, message_id: result.result?.message_id ?? null, chat_id: result.result?.chat?.id ?? null });
     } catch {
       return json({ ok: false, error: "Could not reach Telegram API" }, 502);
