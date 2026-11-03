@@ -24,6 +24,8 @@ class MainActivity : Activity() {
     private var imagePreview: ImageView? = null
     private var imageStatus: TextView? = null
     private val PICK_IMAGE = 8801
+    private val EXPORT_BACKUP = 8802
+    private val IMPORT_BACKUP = 8803
     private val bg = Color.rgb(9, 14, 27)
     private val surface = Color.rgb(18, 27, 47)
     private val surface2 = Color.rgb(25, 37, 62)
@@ -75,7 +77,31 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android API; retained for compatibility with Android 10")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PICK_IMAGE && resultCode == RESULT_OK) {
+        if (requestCode == EXPORT_BACKUP && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                val backup = JSONObject().put("format", "BONE88_BACKUP").put("version", 1)
+                    .put("worker", prefs.getString("worker", "") ?: "")
+                    .put("api_key", prefs.getString("api_key", "") ?: "").put("items", items())
+                contentResolver.openOutputStream(uri)?.use { it.write(backup.toString(2).toByteArray(Charsets.UTF_8)) }
+                toast("Respaldo exportado. Guárdalo en un lugar seguro.")
+            } catch (e: Exception) { toast("Error exportando: " + e.message) }
+        } else if (requestCode == IMPORT_BACKUP && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                val raw = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: throw Exception("No se pudo leer")
+                val backup = JSONObject(raw)
+                if (backup.optString("format") != "BONE88_BACKUP") throw Exception("Archivo no válido")
+                AlertDialog.Builder(this).setTitle("Restaurar respaldo")
+                    .setMessage("Se reemplazarán URL, API key y borradores actuales. ¿Continuar?")
+                    .setNegativeButton("Cancelar", null).setPositiveButton("Restaurar") { _, _ ->
+                        prefs.edit().putString("worker", backup.optString("worker", ""))
+                            .putString("api_key", backup.optString("api_key", ""))
+                            .putString("items", backup.optJSONArray("items")?.toString() ?: "[]").apply()
+                        toast("Respaldo restaurado"); showHome()
+                    }.show()
+            } catch (e: Exception) { toast("Error restaurando: " + e.message) }
+        } else if (requestCode == PICK_IMAGE && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             selectedImageUri = uri
@@ -292,7 +318,23 @@ class MainActivity : Activity() {
         panel.addView(label("CLAVE DE SEGURIDAD", 11f, muted, true))
         val apiKey = field("Pega aquí tu BONE88_API_KEY"); apiKey.setText(prefs.getString("api_key", "")); apiKey.inputType = 129; panel.addView(apiKey)
         panel.addView(actionButton("GUARDAR DIRECCIÓN", true) { prefs.edit().putString("worker", url.text.toString().trim()).putString("api_key", apiKey.text.toString().trim()).apply(); toast("Dirección y clave guardadas"); showHome() })
-        root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
+        val backup = card()
+        backup.addView(label("RESPALDO Y MIGRACIÓN", 15f, Color.WHITE, true))
+        backup.addView(label("Exporta URL, API key y borradores antes de reinstalar. El JSON contiene la clave en texto legible: mantenlo privado.", 12f, muted))
+        backup.addView(actionButton("EXPORTAR RESPALDO JSON") {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = "application/json"
+                putExtra(Intent.EXTRA_TITLE, "BONE88_backup.json")
+            }
+            startActivityForResult(intent, EXPORT_BACKUP)
+        })
+        backup.addView(actionButton("IMPORTAR / RESTAURAR RESPALDO") {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = "application/json"
+            }
+            startActivityForResult(intent, IMPORT_BACKUP)
+        })
+        root.addView(panel); root.addView(backup); root.addView(actionButton("←  VOLVER AL PANEL") { showHome() })
     }
     private fun showPrivacy() {
         base("PRIVACIDAD Y DATOS"); val panel = card()
