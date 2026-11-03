@@ -151,28 +151,42 @@ class MainActivity : Activity() {
         val body = field("Escribe aquí tu publicación").apply { minLines = 5; gravity = Gravity.TOP }; panel.addView(body)
         panel.addView(label("HASHTAGS", 11f, muted, true))
         val hashtags = field("#gaming #BONE88"); panel.addView(hashtags)
-        panel.addView(label("CANAL", 11f, muted, true))
-        val channel = Spinner(this)
-        channel.background = rounded(surface2, 12, 0xff354766.toInt())
-        val channelAdapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, listOf("Telegram", "TikTok", "Instagram", "YouTube")) {
-            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = TextView(this@MainActivity).apply { text = getItem(position); textSize = 15f; setTextColor(Color.WHITE); setPadding(dp(14), dp(12), dp(14), dp(12)); setBackgroundColor(surface2) }
-                return v
-            }
-            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = TextView(this@MainActivity).apply { text = getItem(position); textSize = 15f; setTextColor(Color.WHITE); setPadding(dp(16), dp(14), dp(16), dp(14)); setBackgroundColor(surface) }
-                return v
-            }
+        panel.addView(label("CANALES DE DESTINO", 11f, muted, true))
+        panel.addView(label("Selecciona uno o varios canales.", 12f, muted))
+        val channelNames = listOf("Telegram", "TikTok", "Instagram", "YouTube")
+        val channelChecks = LinkedHashMap<String, CheckBox>()
+        val channelBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rounded(surface2, 12, 0xff354766.toInt())
         }
-        channelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        channel.adapter = channelAdapter
-        panel.addView(channel)
+        for (name in channelNames) {
+            val check = CheckBox(this).apply {
+                text = name
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                buttonTintList = android.content.res.ColorStateList.valueOf(cyan)
+                isChecked = name == "Telegram"
+            }
+            channelChecks[name] = check
+            channelBox.addView(check)
+        }
+        panel.addView(channelBox)
         panel.addView(actionButton("GUARDAR BORRADOR", true) {
             val value = body.text.toString().trim()
             val titleValue = title.text.toString().trim()
             val tagsValue = hashtags.text.toString().trim()
             if (value.isEmpty() && titleValue.isEmpty() && selectedImageUri == null) { toast("Añade una imagen, un título o un texto"); return@actionButton }
-            val a = items(); a.put(JSONObject().put("title", titleValue).put("text", value).put("hashtags", tagsValue).put("imageUri", selectedImageUri?.toString() ?: "").put("channel", channel.selectedItem.toString()).put("status", "Borrador"))
+            val selectedChannels = channelChecks.filterValues { it.isChecked }.keys.toList()
+            if (selectedChannels.isEmpty()) { toast("Selecciona al menos un canal"); return@actionButton }
+            val a = items(); a.put(JSONObject()
+                .put("title", titleValue)
+                .put("text", value)
+                .put("hashtags", tagsValue)
+                .put("imageUri", selectedImageUri?.toString() ?: "")
+                .put("channels", JSONArray(selectedChannels))
+                .put("channel", selectedChannels.joinToString(", "))
+                .put("status", "Borrador"))
             save(a); selectedImageUri = null; toast("Borrador guardado"); showQueue()
         })
         root.addView(panel); root.addView(actionButton("←  VOLVER AL PANEL") { selectedImageUri = null; showHome() })
@@ -188,7 +202,10 @@ class MainActivity : Activity() {
         if (a.length() == 0) { val empty = card(); empty.addView(label("AÚN NO HAY PUBLICACIONES", 15f, Color.WHITE, true)); empty.addView(label("Crea tu primer borrador para empezar.", 13f, muted)); root.addView(empty) }
         for (i in a.length() - 1 downTo 0) {
             val obj = a.getJSONObject(i); val index = i; val panel = card()
-            panel.addView(label(obj.optString("channel").uppercase(), 11f, cyan, true))
+            val selectedChannels = obj.optJSONArray("channels")?.let { channels ->
+                (0 until channels.length()).map { channels.optString(it) }
+            } ?: listOf(obj.optString("channel", "Telegram"))
+            panel.addView(label(selectedChannels.joinToString("  •  ").uppercase(), 11f, cyan, true))
             panel.addView(label(obj.optString("status"), 12f, violet, true))
             val titleText = obj.optString("title").ifBlank { "" }
             if (titleText.isNotBlank()) panel.addView(label(titleText, 16f, Color.WHITE, true))
@@ -200,10 +217,15 @@ class MainActivity : Activity() {
                 val preview = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(Uri.parse(savedImage)); layoutParams = LinearLayout.LayoutParams(-1, dp(180)) }
                 panel.addView(preview)
             }
-            if (obj.optString("status") != "Publicado") {
+            val isTelegramSent = obj.optString("status").startsWith("Telegram publicado")
+            if (obj.optString("status") != "Publicado" && !isTelegramSent) {
                 panel.addView(actionButton("APROBAR Y ENVIAR", true) {
-                    if (obj.optString("channel") == "Telegram") sendTelegram(publicationMessage(obj), index, savedImage)
-                    else { obj.put("status", "Aprobado (pendiente de API oficial)"); save(a); toast("Aprobado. Falta conectar la API oficial."); showQueue() }
+                    if (selectedChannels.contains("Telegram")) {
+                        sendTelegram(publicationMessage(obj), index, savedImage)
+                    } else {
+                        obj.put("status", "Aprobado (pendiente de API oficial)")
+                        save(a); toast("Aprobado. Falta conectar las API oficiales."); showQueue()
+                    }
                 })
                 panel.addView(actionButton("ELIMINAR BORRADOR") { a.remove(index); save(a); showQueue() })
             } else {
@@ -246,7 +268,16 @@ class MainActivity : Activity() {
                 val response = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
                 runOnUiThread {
                     if (code in 200..299) {
-                        val data = items(); if (index < data.length()) { data.getJSONObject(index).put("status", "Publicado"); save(data) }
+                        val data = items()
+                        if (index < data.length()) {
+                            val item = data.getJSONObject(index)
+                            val destinations = item.optJSONArray("channels")?.let { channels ->
+                                (0 until channels.length()).map { channels.optString(it) }
+                            } ?: listOf(item.optString("channel", "Telegram"))
+                            val remaining = destinations.filter { it != "Telegram" }
+                            item.put("status", if (remaining.isEmpty()) "Publicado" else "Telegram publicado; pendientes de API: " + remaining.joinToString(", "))
+                            save(data)
+                        }
                         toast("Enviado a Telegram"); showQueue()
                     } else toast("Telegram respondió HTTP " + code + ": " + response)
                 }; conn.disconnect()
